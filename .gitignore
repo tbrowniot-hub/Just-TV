@@ -1,0 +1,21 @@
+﻿# --- media never goes in git ---
+*.mkv
+*.mp4
+*.iso
+
+# --- logs/state ---
+*.log
+*_log*.txt
+active_job.json
+tv_queue.json
+completed_log.jsonl
+
+# --- generated artifacts ---
+tv_index.json
+match_report*.json
+match_report*.csv
+
+# --- caches ---
+__pycache__/
+*.pyc
+.DS_Store

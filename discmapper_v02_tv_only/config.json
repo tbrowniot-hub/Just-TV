@@ -1,0 +1,21 @@
+{
+  "makemkv_path": "C:\\\\Program Files (x86)\\\\MakeMKV\\\\makemkvcon64.exe",
+  "ffprobe_path": "ffprobe",
+  "drive_index": 0,
+  "auto_eject": true,
+
+  "raw_root_tv": "C:\\\\MediaPipeline\\\\Ripping_Staging\\\\1_Raw_Dumps\\\\TV",
+  "ready_root_tv": "C:\\\\MediaPipeline\\\\Ripping_Staging\\\\3_Ready_For_Unraid\\\\TV",
+  "review_root_tv": "C:\\\\MediaPipeline\\\\Ripping_Staging\\\\2_Work_Bench\\\\TV Review",
+  "unable_root": "C:\\\\MediaPipeline\\\\Ripping_Staging\\\\2_Work_Bench\\\\Unable_to_Read",
+  "done_root_tv": "C:\\\\MediaPipeline\\\\Ripping_Staging\\\\1_Raw_Dumps\\\\TV\\\\_done",
+
+  "rip_floor_minutes": 6,
+  "match_manifest_buffer_minutes": 12,
+  "match_typical_buffer_minutes": 8,
+  "special_runtime_delta_minutes": 10,
+  "max_avg_error_minutes_for_auto": 4.0,
+  "skip_title_penalty_minutes": 2.0,
+
+  "include_show_year_in_folder": true
+}
