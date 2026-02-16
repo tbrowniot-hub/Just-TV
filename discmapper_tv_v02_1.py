@@ -82,8 +82,8 @@ DEFAULT_CONFIG = {
     "drive_index": 0,
     "auto_eject": True,
 
-    "raw_root_tv": r"C:\\MediaPipeline\\Ripping_Staging\\1_Raw_Dumps\\TV",
-    "ready_root_tv": r"C:\\MediaPipeline\\Ripping_Staging\\3_Ready_For_Unraid\\TV",
+    "rips_staging_root": r"C:\\MediaPipeline\\Ripping_Staging\\1_Raw_Dumps\\TV",
+    "final_tv_root": r"C:\\MediaPipeline\\_QUEUE\\TV",
     "review_root_tv": r"C:\\MediaPipeline\\Ripping_Staging\\2_Work_Bench\\TV Review",
     "unable_root": r"C:\\MediaPipeline\\Ripping_Staging\\2_Work_Bench\\Unable_to_Read",
     "done_root_tv": r"C:\\MediaPipeline\\Ripping_Staging\\1_Raw_Dumps\\TV\\_done",
@@ -106,6 +106,15 @@ DEFAULT_CONFIG = {
     "include_show_year_in_folder": True
 }
 
+def _use_alias_path(cfg: Dict[str, Any], merged: Dict[str, Any], canonical_key: str, aliases: List[str]) -> None:
+    if cfg.get(canonical_key):
+        return
+    for alias in aliases:
+        if cfg.get(alias):
+            merged[canonical_key] = cfg[alias]
+            print(f"[DiscMapper TV] Config alias used: {alias} -> {canonical_key}")
+            return
+
 def load_config(path: Path) -> Dict[str, Any]:
     if not path.exists():
         write_json(path, DEFAULT_CONFIG)
@@ -113,6 +122,8 @@ def load_config(path: Path) -> Dict[str, Any]:
     cfg = read_json(path) or {}
     merged = dict(DEFAULT_CONFIG)
     merged.update(cfg)
+    _use_alias_path(cfg, merged, "rips_staging_root", ["raw_root", "raw_root_tv"])
+    _use_alias_path(cfg, merged, "final_tv_root", ["landing_root", "ready_root", "ready_root_tv"])
     return merged
 
 def build_tv_index(manifest_csv: Path) -> Dict[str, Any]:
@@ -378,11 +389,11 @@ def show_folder_name(series: str, year: Optional[int], include_year: bool) -> st
         return f"{s} ({year})"
     return s
 
-def tv_dest_paths(ready_root: Path, series: str, show_year: Optional[int], include_year: bool, season: int, sxxeyy: str, ep_title: str, pkg_index: Optional[int] = None) -> Tuple[Path, Path]:
+def tv_dest_paths(final_root: Path, series: str, show_year: Optional[int], include_year: bool, season: int, sxxeyy: str, ep_title: str, pkg_index: Optional[int] = None) -> Tuple[Path, Path]:
     series_clean = safe_filename(series)
     show_folder = show_folder_name(series, show_year, include_year)
     season_folder = f"Season {season:02d}"
-    dest_dir = ready_root / show_folder / season_folder
+    dest_dir = final_root / show_folder / season_folder
 
     sxx = sxxeyy.strip() if sxxeyy else f"S{season:02d}E??"
     ep_safe = safe_filename(ep_title)
@@ -394,6 +405,84 @@ def tv_dest_paths(ready_root: Path, series: str, show_year: Optional[int], inclu
         fname += f" [CLZ_{int(pkg_index)}]"
     fname += ".mkv"
     return dest_dir, dest_dir / fname
+
+def move_leftovers_to_review(raw_dir: Path, leftovers_dir: Path, mapped_sources: List[Path]) -> int:
+    ensure_dir(leftovers_dir)
+    moved = 0
+    mapped_set = {str(p.resolve()) for p in mapped_sources}
+    for p in sorted([x for x in raw_dir.rglob("*.mkv") if x.is_file()]):
+        if str(p.resolve()) in mapped_set:
+            continue
+        target = leftovers_dir / p.name
+        if target.exists():
+            target = leftovers_dir / f"{target.stem}__dup_{now_stamp()}{target.suffix}"
+        shutil.move(str(p), str(target))
+        moved += 1
+    return moved
+
+def write_ready_marker(dest_dir: Path, job_name: str) -> None:
+    ensure_dir(dest_dir)
+    timestamp = _dt.datetime.now().isoformat(timespec="seconds")
+    (dest_dir / "_READY.txt").write_text(
+        f"ready_at={timestamp}\njob_name={job_name}\n",
+        encoding="utf-8"
+    )
+
+def write_match_reports(
+    review_job_dir: Path,
+    *,
+    job_name: str,
+    status: str,
+    reason: str,
+    series: str,
+    season: int,
+    disc: int,
+    expected_episode_count: int,
+    files: List[Dict[str, Any]],
+    eps: List[Dict[str, Any]],
+    pairs: Optional[List[Tuple[int, int]]],
+    avg_err: Optional[float],
+    leftovers_moved: int
+) -> None:
+    ensure_dir(review_job_dir)
+    mapped_count = len(pairs or [])
+    report_json = {
+        "generated_at": now_stamp(),
+        "job_name": job_name,
+        "status": status,
+        "reason": reason,
+        "series": series,
+        "season": season,
+        "disc": disc,
+        "expected_episode_count": expected_episode_count,
+        "candidate_file_count": len(files),
+        "mapped_count": mapped_count,
+        "leftovers_moved": leftovers_moved,
+        "avg_error_minutes": avg_err,
+        "files": files,
+        "pairs": pairs or []
+    }
+    write_json(review_job_dir / "match_report.json", report_json)
+
+    csv_path = review_job_dir / "match_report.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["job_name", "status", "reason", "series", "season", "disc", "expected_episode_count", "candidate_file_count", "mapped_count", "avg_error_minutes", "leftovers_moved"])
+        w.writerow([job_name, status, reason, series, season, disc, expected_episode_count, len(files), mapped_count, "" if avg_err is None else f"{avg_err:.3f}", leftovers_moved])
+        w.writerow([])
+        w.writerow(["episode_idx", "sxxeyy", "episode_title", "matched_file", "duration_s", "title_index"])
+        pair_by_ep = {ei: fj for ei, fj in (pairs or [])}
+        for ei, ep in enumerate(eps):
+            fj = pair_by_ep.get(ei)
+            file_meta = files[fj] if fj is not None and fj < len(files) else {}
+            w.writerow([
+                ei + 1,
+                ep.get("sxxeyy") or "",
+                ep.get("episode_title") or "",
+                file_meta.get("name", ""),
+                file_meta.get("duration_s", ""),
+                file_meta.get("title_index", "")
+            ])
 
 def cmd_import_manifest(args: argparse.Namespace) -> None:
     idx = build_tv_index(Path(args.manifest).expanduser())
@@ -521,13 +610,13 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
     drive_index = int(cfg["drive_index"])
     auto_eject = bool(cfg["auto_eject"])
 
-    raw_root = Path(cfg["raw_root_tv"])
-    ready_root = Path(cfg["ready_root_tv"])
+    staging_root = Path(cfg["rips_staging_root"])
+    final_tv_root = Path(cfg["final_tv_root"])
     review_root = Path(cfg["review_root_tv"])
     unable_root = Path(cfg["unable_root"])
     done_root = Path(cfg["done_root_tv"])
 
-    ensure_dir(raw_root); ensure_dir(ready_root); ensure_dir(review_root); ensure_dir(unable_root); ensure_dir(done_root)
+    ensure_dir(staging_root); ensure_dir(final_tv_root); ensure_dir(review_root); ensure_dir(unable_root); ensure_dir(done_root)
 
     floor_min = int(cfg["rip_floor_minutes"])
     floor_s = minutes_to_seconds(floor_min)
@@ -574,7 +663,7 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
         print(f"[DiscMapper TV] Disc detected: {drive_letter}")
 
         job_name = safe_filename(f"{series} - S{season:02d}D{disc:02d} - {now_stamp()}")
-        job_dir = raw_root / job_name
+        job_dir = staging_root / job_name
         ensure_dir(job_dir)
 
         rip_log = job_dir / f"makemkv_rip_{now_stamp()}.log"
@@ -590,17 +679,34 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
                 print("[DiscMapper TV] WARNING: auto-eject failed")
 
         mkvs = sorted([p for p in job_dir.rglob("*.mkv") if p.is_file()])
+        review_job_dir = review_root / job_name
+        leftovers_dir = review_job_dir / "Leftovers"
         if not mkvs:
+            write_match_reports(
+                review_job_dir,
+                job_name=job_name,
+                status="UNABLE",
+                reason="no_mkvs_produced",
+                series=series,
+                season=season,
+                disc=disc,
+                expected_episode_count=len(eps),
+                files=[],
+                eps=eps,
+                pairs=None,
+                avg_err=None,
+                leftovers_moved=0
+            )
             print("[DiscMapper TV] No MKVs produced â†’ Unable_to_Read")
             shutil.move(str(job_dir), str(unable_root / job_name))
             continue
 
         files: List[Dict[str, Any]] = []
+        review_reason: Optional[str] = None
         for p in mkvs:
             dur = ffprobe_duration_seconds(ffprobe, p)
             if dur is None:
-                print("[DiscMapper TV] ffprobe failed (install FFmpeg) â†’ Review")
-                shutil.move(str(job_dir), str(review_root / job_name))
+                review_reason = "ffprobe_failed"
                 break
             if dur < disc_floor_s:
                 continue
@@ -611,87 +717,117 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
                 "title_index": file_title_index(p),
                 "size": p.stat().st_size
             })
-        else:
-            if len(files) < len(eps):
-                print(f"[DiscMapper TV] Not enough episode-length files ({len(files)} found for {len(eps)} eps; minlength={disc_floor_min}m) â†’ Review")
-                shutil.move(str(job_dir), str(review_root / job_name))
-                continue
+        pairs: Optional[List[Tuple[int, int]]] = None
+        avg_err: Optional[float] = None
+        eps_win: List[Dict[str, Any]] = []
 
+        if review_reason is None and len(files) < len(eps):
+            review_reason = f"insufficient_candidates_{len(files)}_for_{len(eps)}"
+
+        if review_reason is None:
             files.sort(key=lambda f: (f["title_index"] is None, f["title_index"] or 9999, f["name"].lower()))
             typical_s = compute_typical_runtime_seconds(files, episode_count=len(eps))
             if typical_s is None:
-                print("[DiscMapper TV] Could not compute typical runtime â†’ Review")
-                shutil.move(str(job_dir), str(review_root / job_name))
-                continue
-
-            eps_win = build_episode_windows(
-                eps, typical_s=typical_s,
-                manifest_buf_min=manifest_buf,
-                typical_buf_min=typical_buf,
-                special_delta_min=special_delta
-            )
-
-            pairs, avg_err = dp_map_files_to_episodes(eps_win, files, typical_s=typical_s, skip_penalty_minutes=skip_penalty)
-            if pairs is None or avg_err > max_avg_err or len(pairs) != len(eps_win):
-                print(f"[DiscMapper TV] Mapping uncertain (avg_err={avg_err:.2f} min) â†’ Review")
-                shutil.move(str(job_dir), str(review_root / job_name))
-                continue
-
-            moved = 0
-            for ei, fj in pairs:
-                e = eps_win[ei]
-                f = files[fj]
-                src = Path(f["path"])
-
-                dest_dir, dest_file = tv_dest_paths(
-                    ready_root,
-                    series=e["series"],
-                    show_year=show_year,
-                    include_year=include_year,
-                    season=int(e["season"]),
-                    sxxeyy=e.get("sxxeyy") or f"S{season:02d}E{ei+1:02d}",
-                    ep_title=e.get("episode_title") or "",
-                    pkg_index=to_int(e.get("index"))
+                review_reason = "typical_runtime_unavailable"
+            else:
+                eps_win = build_episode_windows(
+                    eps, typical_s=typical_s,
+                    manifest_buf_min=manifest_buf,
+                    typical_buf_min=typical_buf,
+                    special_delta_min=special_delta
                 )
-                ensure_dir(dest_dir)
 
-                final = dest_file
-                if final.exists():
-                    final = final.with_name(final.stem + f"__dup_{now_stamp()}.mkv")
+                pairs, avg_err = dp_map_files_to_episodes(eps_win, files, typical_s=typical_s, skip_penalty_minutes=skip_penalty)
+                if pairs is None or avg_err > max_avg_err or len(pairs) != len(eps_win):
+                    avg_text = "n/a" if avg_err is None else f"{avg_err:.2f}"
+                    review_reason = f"mapping_uncertain_avg_err_{avg_text}"
 
-                shutil.move(str(src), str(final))
-                moved += 1
+        if review_reason is not None:
+            ensure_dir(review_job_dir)
+            raw_capture_dir = review_job_dir / "raw"
+            if raw_capture_dir.exists():
+                shutil.rmtree(raw_capture_dir)
+            shutil.move(str(job_dir), str(raw_capture_dir))
+            leftovers_moved = move_leftovers_to_review(raw_capture_dir, leftovers_dir, mapped_sources=[])
+            write_match_reports(
+                review_job_dir,
+                job_name=job_name,
+                status="REVIEW",
+                reason=review_reason,
+                series=series,
+                season=season,
+                disc=disc,
+                expected_episode_count=len(eps),
+                files=files,
+                eps=eps_win if eps_win else eps,
+                pairs=pairs,
+                avg_err=avg_err,
+                leftovers_moved=leftovers_moved
+            )
+            print(f"[DiscMapper TV] REVIEW: {review_reason}")
+            continue
 
-                if bool(cfg.get("write_sidecar_json", True)):
-                    sidecar = final.with_name(final.stem + ".discmapper.json")
-                    meta = {
-                        "series": e.get("series"),
-                        "season": e.get("season"),
-                        "disc": e.get("disc"),
-                        "sxxeyy": e.get("sxxeyy"),
-                        "episode_title": e.get("episode_title"),
-                        "index": to_int(e.get("index")),
-                        "upc": e.get("upc"),
-                        "imdb_url": e.get("imdb_url"),
-                        "physical_title": e.get("physical_title"),
-                        "source_title_index": f.get("title_index"),
-                        "source_filename": f.get("name"),
-                        "duration_s": f.get("duration_s"),
-                        "bytes": f.get("size"),
-                        "ripped_job_dir": str(job_dir),
-                        "final_path": str(final),
-                        "mapped_at": now_stamp(),
-                    }
-                    try:
-                        write_json(sidecar, meta)
-                    except Exception:
-                        pass
+        moved = 0
+        touched_dest_dirs: List[Path] = []
+        for ei, fj in pairs or []:
+            e = eps_win[ei]
+            f = files[fj]
+            src = Path(f["path"])
 
-            # Move job folder to done (keeps any leftovers/logs for audit)
-            if job_dir.exists():
-                shutil.move(str(job_dir), str(done_root / job_name))
+            dest_dir, dest_file = tv_dest_paths(
+                final_tv_root,
+                series=e["series"],
+                show_year=show_year,
+                include_year=include_year,
+                season=int(e["season"]),
+                sxxeyy=e.get("sxxeyy") or f"S{season:02d}E{ei+1:02d}",
+                ep_title=e.get("episode_title") or "",
+                pkg_index=to_int(e.get("index"))
+            )
+            ensure_dir(dest_dir)
+            touched_dest_dirs.append(dest_dir)
 
-            print(f"[DiscMapper TV] SUCCESS: moved {moved} eps â†’ {ready_root}\\{show_folder_name(series, show_year, include_year)}\\Season {season:02d}")
+            final = dest_file
+            if final.exists():
+                final = final.with_name(final.stem + f"__dup_{now_stamp()}.mkv")
+
+            shutil.move(str(src), str(final))
+            moved += 1
+
+            if bool(cfg.get("write_sidecar_json", True)):
+                sidecar = final.with_name(final.stem + ".discmapper.json")
+                meta = {
+                    "series": e.get("series"),
+                    "season": e.get("season"),
+                    "disc": e.get("disc"),
+                    "sxxeyy": e.get("sxxeyy"),
+                    "episode_title": e.get("episode_title"),
+                    "index": to_int(e.get("index")),
+                    "upc": e.get("upc"),
+                    "imdb_url": e.get("imdb_url"),
+                    "physical_title": e.get("physical_title"),
+                    "source_title_index": f.get("title_index"),
+                    "source_filename": f.get("name"),
+                    "duration_s": f.get("duration_s"),
+                    "bytes": f.get("size"),
+                    "ripped_job_dir": str(job_dir),
+                    "final_path": str(final),
+                    "mapped_at": now_stamp(),
+                }
+                try:
+                    write_json(sidecar, meta)
+                except Exception:
+                    pass
+
+        ready_dirs = {str(d) for d in touched_dest_dirs}
+        for d in sorted(ready_dirs):
+            write_ready_marker(Path(d), job_name)
+
+        # Move job folder to done (keeps any leftovers/logs for audit)
+        if job_dir.exists():
+            shutil.move(str(job_dir), str(done_root / job_name))
+
+        print(f"[DiscMapper TV] SUCCESS: moved {moved} eps â†’ {final_tv_root}\\{show_folder_name(series, show_year, include_year)}\\Season {season:02d}")
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="discmapper_tv_v02")

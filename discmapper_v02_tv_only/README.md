@@ -1,7 +1,7 @@
 # DiscMapper v0.2 — TV Shows (Windows)
 
 Final files land here (auto-created):
-C:\MediaPipeline\Ripping_Staging\3_Ready_For_Unraid\TV\<Series>\Season 01\...
+C:\MediaPipeline\_QUEUE\TV\<Series>\Season 01\...
 
 Your manifest (truth) must be: tv_manifest.csv with Disc filled (you map Disc from the box/back cover).
 
