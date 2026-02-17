@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Mapped Discs{% endblock %}
+{% block body %}
+<h1>Mapped Discs</h1>
+<p class="helper-text">Review which discs will be included in the rip queue.</p>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <p>Min clip threshold: <b>{{ cfg.min_clip_seconds }}s</b>. Short items are hidden by default.</p>
+  <p>{% if show_short %}<a href="/map">Hide short clips</a>{% else %}<a href="/map?show_short=1">Show short clips</a>{% endif %}</p>
+  <form method="post" action="/map/save">
+    <table>
+      <thead><tr><th>Use</th><th>Priority</th><th>Series</th><th>Season</th><th>Disc</th><th>Episodes</th><th>Short</th><th>Episodes Detail</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><input type="checkbox" name="include" value="{{ r.queue_key }}" {% if r.include_flag %}checked{% endif %}></td>
+          <td><input type="number" name="priority__{{ r.queue_key }}" value="{{ r.priority }}" min="1" style="width:70px"></td>
+          <td>{{ r.series }}</td>
+          <td>{{ r.season }}</td>
+          <td>{{ r.disc }}</td>
+          <td>{{ r.episode_count }}</td>
+          <td>{{ r.short_count }}</td>
+          <td>
+            {% for e in r.episodes %}
+            <div>{{ e.sxxeyy }} | min={{ e.min_minutes }}m max={{ e.max_minutes }}m {% if e.min_minutes and (e.min_minutes*60) < cfg.min_clip_seconds %}| too_short{% endif %}</div>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="toolbar"><button type="submit">Save Mapping</button></div>
+  </form>
+</section>
+{% endblock %}

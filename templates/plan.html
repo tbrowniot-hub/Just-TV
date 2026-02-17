@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}TV Planning UI{% endblock %}
+{% block body %}
+<h1>TV Planning UI</h1>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <h3 class="section-title">Import Collection</h3>
+  <div class="toolbar">
+    <form method="post" action="/plan/import-clz" class="inline-form"><button type="submit">Import/Refresh CLZ</button></form>
+    <form method="post" action="/plan/pick-clz" class="inline-form"><button type="submit">Choose CLZ CSV</button></form>
+  </div>
+  <p>CLZ export path: <code>{{ active_clz_path }}</code> | Exists: <b>{{ 'yes' if active_clz_exists else 'no' }}</b></p>
+</section>
+
+<section class="card">
+  <h3 class="section-title">Organize Packages</h3>
+  <p class="helper-text">Use this if CLZ did not automatically group a box set.</p>
+  <p>Total CLZ rows: <b>{{ total_rows }}</b> | TV-filtered rows: <b>{{ tv_filtered_rows }}</b> | Is TV Series column detected: <b>{{ 'yes' if has_is_tv_column else 'no' }}</b></p>
+  <form method="get" action="/plan" class="inline-form">
+    <label>Search <input type="text" name="q" value="{{ q }}"></label>
+    <label><input type="checkbox" name="tv_only" value="1" {% if tv_only %}checked{% endif %}> TV only</label>
+    <label><input type="checkbox" name="group_sets" value="1" {% if group_sets %}checked{% endif %}> Group box sets</label>
+    <button type="submit">Apply</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3 class="section-title">Generate Engine Files</h3>
+  <div class="toolbar">
+    <form method="post" action="/plan/build-index" class="inline-form"><button type="submit">Build TV Index</button></form>
+    <form method="post" action="/plan/export-queue" class="inline-form"><button type="submit">Quick Build Queue</button></form>
+  </div>
+  <details>
+    <summary>Advanced Tools</summary>
+    <div class="toolbar">
+      <form method="post" action="/plan/export-manifest" class="inline-form"><button type="submit">Export TV Manifest</button></form>
+      <a class="button-link" href="/plan/validate" target="_blank">Validate</a>
+    </div>
+  </details>
+</section>
+
+<section class="card">
+  <table>
+    <thead><tr><th>CLZ Index</th><th>Title</th><th>Barcode</th><th>Format</th><th>Nr Discs</th><th>Box Set</th><th>Parent</th><th>Notes</th><th>Map</th><th>Fix Box Set Parent</th></tr></thead>
+    <tbody>
+      {% for item in roots %}
+      <tr>
+        <td>{{ item.clz_index }}</td><td><a href="/package/{{ item.clz_index }}">{{ item.title }}</a></td><td>{{ item.barcode }}</td><td>{{ item.format }}</td><td>{{ item.nr_discs }}</td><td>{{ item.box_set }}</td><td>{{ parent_labels.get(item.clz_index, '') }}</td><td>{{ item.notes }}</td>
+        <td><a href="/package/{{ item.clz_index }}">Map</a></td>
+        <td>
+          <form method="post" action="/plan/parent/{{ item.clz_index }}" class="inline-form"><input type="text" name="parent_index" value="{{ item.parent_index or '' }}" size="6"><button type="submit">Set</button></form>
+          <form method="post" action="/plan/parent-clear/{{ item.clz_index }}" class="inline-form"><button type="submit">Clear</button></form>
+        </td>
+      </tr>
+      {% if group_sets and parent_to_children[item.clz_index] %}
+      {% for child in parent_to_children[item.clz_index] %}
+      <tr>
+        <td>{{ child.clz_index }}</td><td>-> <a href="/package/{{ child.clz_index }}">{{ child.title }}</a></td><td>{{ child.barcode }}</td><td>{{ child.format }}</td><td>{{ child.nr_discs }}</td><td>{{ child.box_set }}</td><td>{{ parent_labels.get(child.clz_index, '') }}</td><td>{{ child.notes }}</td>
+        <td><a href="/package/{{ child.clz_index }}">Map</a></td>
+        <td>
+          <form method="post" action="/plan/parent/{{ child.clz_index }}" class="inline-form"><input type="text" name="parent_index" value="{{ child.parent_index or '' }}" size="6"><button type="submit">Set</button></form>
+          <form method="post" action="/plan/parent-clear/{{ child.clz_index }}" class="inline-form"><button type="submit">Clear</button></form>
+        </td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

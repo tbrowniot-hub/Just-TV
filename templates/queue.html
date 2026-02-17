@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Rip Queue Builder{% endblock %}
+{% block body %}
+<h1>Rip Queue Builder</h1>
+<p class="helper-text">Order the discs in the sequence you will insert them into the drive.</p>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <h3>Candidates</h3>
+  <p>Source: saved disc mappings in SQLite</p>
+  <p>{% if show_unmapped %}<a href="/queue">Hide unmapped</a>{% else %}<a href="/queue?show_unmapped=1">Show unmapped</a>{% endif %}</p>
+  <form method="post" action="/queue/add">
+    <table>
+      <thead><tr><th>Use</th><th>Priority</th><th>Disc Order Key</th><th>Series</th><th>Season</th><th>Disc</th><th>Mapped Count</th><th>Short Warn</th></tr></thead>
+      <tbody>
+        {% for r in candidates %}
+        <tr>
+          <td><input type="checkbox" name="candidate_key" value="{{ r.queue_key }}" {% if not r.is_mapped %}disabled{% endif %}></td>
+          <td>{{ r.priority }}</td>
+          <td>{{ r.queue_key }}</td>
+          <td>{{ r.series }}</td>
+          <td>{{ r.season }}</td>
+          <td>{{ r.disc }}</td>
+          <td>{{ r.episode_count }}</td>
+          <td>{{ r.short_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="toolbar"><button type="submit">Add Selected -></button></div>
+  </form>
+  {% if not candidates %}<p>No candidates found. Add disc episode mappings from a package page first.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h3>Queue</h3>
+  <form method="post" action="/queue/save-draft">
+    <table>
+      <thead><tr><th>Include</th><th>Pos</th><th>Disc Order Key</th><th>Series</th><th>Season</th><th>Disc</th><th>Mapped Count</th><th>Short Warn</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for q in queue_rows %}
+        <tr>
+          <td><input type="checkbox" name="include_q" value="{{ q.queue_key }}" {% if q.included %}checked{% endif %}></td>
+          <td><input type="number" name="position__{{ q.queue_key }}" value="{{ q.position }}" min="1" style="width:70px"></td>
+          <td>{{ q.queue_key }} {% if q.missing_meta %}<span class="msg">missing in current index</span>{% endif %}</td>
+          <td>{{ q.series or '' }}</td>
+          <td>{{ q.season or '' }}</td>
+          <td>{{ q.disc or '' }}</td>
+          <td>{{ q.episode_count }}</td>
+          <td>{{ q.short_count }}</td>
+          <td>
+            <input type="hidden" name="queue_key_list" value="{{ q.queue_key }}">
+            <button formaction="/queue/move-up" formmethod="post" name="action_key" value="{{ q.queue_key }}" type="submit">Up</button>
+            <button formaction="/queue/move-down" formmethod="post" name="action_key" value="{{ q.queue_key }}" type="submit">Down</button>
+            <button formaction="/queue/remove" formmethod="post" name="action_key" value="{{ q.queue_key }}" type="submit">Remove</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="toolbar">
+      <button type="submit">Save Queue Draft</button>
+      <button formaction="/queue/build" formmethod="post" type="submit">Build Queue</button>
+      <button formaction="/queue/clear" formmethod="post" type="submit">Clear Queue</button>
+    </div>
+  </form>
+  <p>Output: <code>{{ queue_path }}</code></p>
+</section>
+
+<details class="card">
+  <summary>Debug Info</summary>
+  <pre>candidate_source={{ debug.candidate_source }}
+total_candidates={{ debug.total_candidates }}
+mapped_candidates={{ debug.mapped_candidates }}
+visible_candidates={{ debug.visible_candidates }}
+queue_draft_count={{ debug.draft_count }}</pre>
+</details>
+{% endblock %}

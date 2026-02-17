@@ -90,6 +90,7 @@ DEFAULT_CONFIG = {
 
     # DIRTY MODE: rip all (but ignore tiny junk)
     "rip_floor_minutes": 6,
+    "min_clip_seconds": 360,
     "use_manifest_driven_minlength": True,
     "manifest_minlength_buffer_minutes": 2,
     "write_sidecar_json": True,
@@ -618,8 +619,8 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
 
     ensure_dir(staging_root); ensure_dir(final_tv_root); ensure_dir(review_root); ensure_dir(unable_root); ensure_dir(done_root)
 
-    floor_min = int(cfg["rip_floor_minutes"])
-    floor_s = minutes_to_seconds(floor_min)
+    floor_min = int(cfg.get("rip_floor_minutes", 6))
+    floor_s_cfg = int(cfg.get("min_clip_seconds") or minutes_to_seconds(floor_min))
 
     manifest_buf = int(cfg["match_manifest_buffer_minutes"])
     typical_buf = int(cfg["match_typical_buffer_minutes"])
@@ -641,15 +642,21 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
             print(f"[DiscMapper TV] Missing key in index: {key}")
             continue
 
-        # Determine minlength for ripping/filtering: manifest-driven when possible so we don't drop short episodes.
+        # Determine minlength in seconds. If manifest explicitly maps episode durations
+        # for this disc, allow short clips (mapped intent) by dropping rip/filter floor to 1s.
         use_manifest_minlen = bool(cfg.get("use_manifest_driven_minlength", True))
         minlen_buf = int(cfg.get("manifest_minlength_buffer_minutes", 2))
         disc_floor_min = floor_min
+        has_explicit_manifest_lengths = all(to_int(e.get("min_minutes")) is not None for e in eps)
         if use_manifest_minlen:
             mins = [to_int(e.get("min_minutes")) for e in eps if to_int(e.get("min_minutes")) is not None]
             if mins:
                 disc_floor_min = max(1, int(min(mins)) - max(0, minlen_buf))
         disc_floor_s = minutes_to_seconds(disc_floor_min)
+        if has_explicit_manifest_lengths:
+            disc_floor_s = 1
+        else:
+            disc_floor_s = max(disc_floor_s, floor_s_cfg)
 
         series = eps[0]["series"]
         season = int(eps[0]["season"])
@@ -668,6 +675,8 @@ def cmd_rip_queue(args: argparse.Namespace) -> None:
 
         rip_log = job_dir / f"makemkv_rip_{now_stamp()}.log"
         print(f"[DiscMapper TV] Dirty mode: ripping ALL titles. minlength={disc_floor_s}s")
+        if has_explicit_manifest_lengths:
+            print("[DiscMapper TV] Manifest-mapped disc: short clips allowed.")
         rc = makemkv_rip_all(makemkv, drive_index, job_dir, disc_floor_s, rip_log)
         if rc != 0:
             print(f"[DiscMapper TV] WARNING: MakeMKV returned exit {rc}. Will continue if any MKVs were produced.")

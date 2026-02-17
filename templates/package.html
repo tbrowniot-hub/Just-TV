@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Package Detail{% endblock %}
+{% block body %}
+<h1>Package {{ pkg.clz_index }} - {{ pkg.title }}</h1>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <h3 class="section-title">Mapping Checklist</h3>
+  <table>
+    <tbody>
+      {% for item, ok in mapping_checklist %}
+      <tr><th style="width:32px;">{% if ok %}✓{% else %}☐{% endif %}</th><td>{{ item }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><b>Next Step:</b> {{ package_next_step }}</p>
+</section>
+
+<section class="card">
+  <h3>Package Metadata</h3>
+  <table>
+    <tbody>
+      <tr><th>Title</th><td>{{ pkg.title }}</td></tr>
+      <tr><th>Barcode</th><td>{{ pkg.barcode }}</td></tr>
+      <tr><th>Format</th><td>{{ pkg.format }}</td></tr>
+      <tr><th>Nr Discs</th><td>{{ pkg.nr_discs }}</td></tr>
+      <tr><th>Box Set</th><td>{{ pkg.box_set }}</td></tr>
+      <tr><th>Notes</th><td>{{ pkg.notes }}</td></tr>
+    </tbody>
+  </table>
+  <div class="toolbar">
+    <form method="post" action="/package/{{ pkg.clz_index }}/parent" class="inline-form">
+      <label>Parent Index <input type="text" name="parent_index" value="{{ pkg.parent_index or '' }}"></label>
+      <button type="submit">Set Parent</button>
+    </form>
+    <form method="post" action="/package/{{ pkg.clz_index }}/parent-clear" class="inline-form">
+      <button type="submit">Clear Parent</button>
+    </form>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Link To Show (TVMaze)</h3>
+  <p>Linked show: <b>{{ link.show_name or '' }}</b> (id={{ link.tvmaze_show_id or '' }})</p>
+  <form method="get" action="/package/{{ pkg.clz_index }}" class="inline-form">
+    <label>Search TVMaze <input type="text" name="q" value="{{ search_q }}"></label>
+    <button type="submit">Search</button>
+  </form>
+  <form method="post" action="/package/{{ pkg.clz_index }}/episodes-refresh" class="inline-form">
+    <button type="submit">Refresh Episodes</button>
+  </form>
+  {% if search_results %}
+  <table>
+    <thead><tr><th>Show</th><th>Premiere</th><th>TVMaze ID</th><th>IMDb</th><th>Link</th></tr></thead>
+    <tbody>
+      {% for s in search_results %}
+      <tr>
+        <td>{{ s.name }}</td><td>{{ s.premiered }}</td><td>{{ s.id }}</td><td>{{ s.imdb_id }}</td>
+        <td>
+          <form method="post" action="/package/{{ pkg.clz_index }}/show-link" class="inline-form">
+            <input type="hidden" name="tvmaze_show_id" value="{{ s.id }}">
+            <input type="hidden" name="show_name" value="{{ s.name }}">
+            <input type="hidden" name="imdb_id" value="{{ s.imdb_id }}">
+            <button type="submit">Use</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h3>Episodes</h3>
+  {% if not episodes_cached %}
+  <div class="msg">No episodes cached. Click Refresh Episodes, then pick a season.</div>
+  {% endif %}
+  <form method="post" action="/package/{{ pkg.clz_index }}/season" class="inline-form">
+    <label>Season
+      <select name="selected_season">
+        <option value="">--</option>
+        {% for s in seasons %}
+        <option value="{{ s }}" {% if s == selected_season %}selected{% endif %}>Season {{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Save Season</button>
+  </form>
+  {% if episodes %}
+  <table>
+    <thead><tr><th>SxxEyy</th><th>Title</th><th>TVMaze Episode ID</th><th>Runtime (min)</th></tr></thead>
+    <tbody>
+      {% for e in episodes %}
+      <tr>
+        <td>{{ e.episode_code }}</td>
+        <td>{{ e.episode_title }}</td>
+        <td>{{ e.tvmaze_episode_id }}</td>
+        <td>{{ e.runtime_minutes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h3>Discs</h3>
+  <div class="toolbar">
+    <form method="post" action="/package/{{ pkg.clz_index }}/discs-reset" class="inline-form">
+      <label>Disc count <input type="number" min="1" name="disc_count" value="{{ pkg.nr_discs or 1 }}"></label>
+      <button type="submit">Reset Discs</button>
+    </form>
+    <form method="post" action="/package/{{ pkg.clz_index }}/disc-save" class="inline-form">
+      <label>Disc # <input type="number" min="1" name="disc_number" value="1"></label>
+      <label>Label <input type="text" name="label"></label>
+      <button type="submit">Add/Update Disc</button>
+    </form>
+  </div>
+  <table>
+    <thead><tr><th>Disc</th><th>Mapped Count</th><th>Mapped Summary</th><th>Action</th></tr></thead>
+    <tbody>
+      {% for d in discs %}
+      <tr>
+        <td>Disc {{ d.disc_number }} ({{ d.disc_uid }}){% if d.label %} - {{ d.label }}{% endif %}</td>
+        <td>{{ d.mapped_count }}</td>
+        <td>{{ d.mapped_summary }}</td>
+        <td><a class="button-link" href="/disc/{{ d.disc_uid }}">Assign Episodes</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

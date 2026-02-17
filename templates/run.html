@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Run TV Ripper{% endblock %}
+{% block body %}
+<h1>Start Rip Run</h1>
+<p class="helper-text">This will launch DiscMapper TV using the current queue and index.</p>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <table>
+    <tbody>
+      <tr><th>Rip Queue File</th><td><code>{{ queue_path }}</code></td></tr>
+      <tr><th>Queue Exists</th><td><b>{{ 'yes' if queue_exists else 'no' }}</b></td></tr>
+      <tr><th>Queue Items</th><td><b>{{ queue_count }}</b></td></tr>
+      <tr><th>Engine Entrypoint</th><td><code>{{ engine_path }}</code></td></tr>
+    </tbody>
+  </table>
+  {% if run_error %}<div class="msg">{{ run_error }}</div>{% endif %}
+  {% if errors %}<div class="msg">Config errors: {{ errors|join('; ') }}</div>{% endif %}
+  {% if warnings %}<div>Warnings: {{ warnings|join('; ') }}</div>{% endif %}
+  <div class="toolbar">
+    <button id="startBtn" onclick="startRun()" {% if not ready %}disabled{% endif %}>Start</button>
+    <button onclick="stopRun()">Stop</button>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Status</h3>
+  <pre id="status"></pre>
+  <h3>Log Tail</h3>
+  <pre id="log"></pre>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function startRun(){const r=await fetch('/api/v1/run/start',{method:'POST'});document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2);}
+async function stopRun(){const r=await fetch('/api/v1/run/stop',{method:'POST'});document.getElementById('status').textContent=JSON.stringify(await r.json(),null,2);}
+async function poll(){const r=await fetch('/api/v1/run/status');const j=await r.json();document.getElementById('status').textContent=JSON.stringify(j,null,2);document.getElementById('log').textContent=(j.log_tail||[]).join('\n');}
+setInterval(poll,1500); poll();
+</script>
+{% endblock %}

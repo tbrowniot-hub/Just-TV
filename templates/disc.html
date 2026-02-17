@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Disc Assignment{% endblock %}
+{% block body %}
+<h1>Disc Assignment</h1>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <table>
+    <tbody>
+      <tr><th>Disc UID</th><td>{{ disc.disc_uid }}</td></tr>
+      <tr><th>Disc Number</th><td>{{ disc.disc_number }}</td></tr>
+      <tr><th>Package</th><td><a href="/package/{{ disc.clz_index }}">{{ pkg.title if pkg else disc.clz_index }}</a></td></tr>
+      <tr><th>Show</th><td>{{ link.show_name or '' }}{% if link.tvmaze_show_id %} ({{ link.tvmaze_show_id }}){% endif %}</td></tr>
+      <tr><th>Season</th><td>{% if selected_season %}{{ selected_season }}{% else %}-{% endif %}</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  {% if not link.tvmaze_show_id %}
+  <div class="msg">No show linked for this package. Go back to package and link a TVMaze show.</div>
+  {% elif not selected_season %}
+  <div class="msg">No season selected. Go back to package and pick a season.</div>
+  {% elif not episodes %}
+  <div class="msg">No cached episodes for selected season. Go back to package and click Refresh Episodes.</div>
+  {% else %}
+  <form method="post" action="/disc/{{ disc.disc_uid }}/save">
+    <div class="toolbar">
+      <button type="submit">Save</button>
+      <button type="button" onclick="toggleAll(true)">Select all</button>
+      <button type="button" onclick="toggleAll(false)">Clear</button>
+      <a class="button-link" href="/package/{{ disc.clz_index }}">Back to Package</a>
+    </div>
+    <table>
+      <thead><tr><th>[x]</th><th>SxxEyy</th><th>Episode Title</th><th>Runtime (min)</th></tr></thead>
+      <tbody>
+        {% for e in episodes %}
+        <tr>
+          <td><input type="checkbox" name="episode_code" value="{{ e.episode_code }}" {% if e.episode_code.upper() in mapped_codes %}checked{% endif %}></td>
+          <td>{{ e.episode_code }}</td>
+          <td>{{ e.episode_title }}</td>
+          <td>{{ e.runtime_minutes or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="toolbar">
+      <button type="submit">Save</button>
+      <button type="button" onclick="toggleAll(true)">Select all</button>
+      <button type="button" onclick="toggleAll(false)">Clear</button>
+      <a class="button-link" href="/package/{{ disc.clz_index }}">Back to Package</a>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAll(value){
+  const boxes = document.querySelectorAll('input[type="checkbox"][name="episode_code"]');
+  boxes.forEach(b => b.checked = value);
+}
+</script>
+{% endblock %}

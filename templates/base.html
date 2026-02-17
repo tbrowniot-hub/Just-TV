@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Just-TV{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="site-title">Just-TV</h1>
+      <nav class="site-nav">
+        <a class="nav-link {% if nav_current=='plan' %}active{% endif %}" href="/plan">Plan</a>
+        {% if nav_package_clz_index %}
+        <a class="nav-link {% if nav_current=='package' %}active{% endif %}" href="/package/{{ nav_package_clz_index }}">Package</a>
+        {% endif %}
+        <a class="nav-link {% if nav_current=='queue' %}active{% endif %}" href="/queue">Queue</a>
+        <a class="nav-link {% if nav_current=='config' %}active{% endif %}" href="/config">Config</a>
+        <a class="nav-link {% if nav_current=='run' %}active{% endif %}" href="/run">Run</a>
+        <a class="nav-link {% if nav_current=='summary' %}active{% endif %}" href="/map">Mapped Discs</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container page-body">
+    {% if wf %}
+    <section class="card workflow-banner">
+      <div class="workflow-steps">
+        <div class="wf-step {% if wf.clz_loaded %}done{% endif %}"><span class="wf-num">1</span> Import CLZ</div>
+        <div class="wf-step {% if wf.mapping_complete %}done{% endif %}"><span class="wf-num">2</span> Map Packages &amp; Discs</div>
+        <div class="wf-step {% if wf.queue_built %}done{% endif %}"><span class="wf-num">3</span> Build Queue</div>
+        <div class="wf-step {% if wf.ready_to_run %}done{% endif %}"><span class="wf-num">4</span> Run Rip</div>
+      </div>
+      <p><b>Next Step:</b> {{ wf.next_step }}</p>
+    </section>
+    {% endif %}
+    {% block body %}{% endblock %}
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

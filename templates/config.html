@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Config{% endblock %}
+{% block body %}
+<h1>Config</h1>
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<section class="card">
+  <div class="toolbar">
+    <label>rips_staging_root <input id="rips_staging_root" value="{{ cfg.rips_staging_root }}" style="width:480px"></label>
+    <button onclick="browseInto('rips_staging_root')" type="button">Browse...</button>
+  </div>
+  <div class="toolbar">
+    <label>rips_complete_root <input id="rips_complete_root" value="{{ cfg.rips_complete_root }}" style="width:480px"></label>
+    <button onclick="browseInto('rips_complete_root')" type="button">Browse...</button>
+  </div>
+  <div class="toolbar">
+    <label>min_clip_seconds <input id="min_clip_seconds" type="number" min="1" value="{{ cfg.min_clip_seconds }}"></label>
+    <label>clz_export_path <input id="clz_export_path" value="{{ cfg.clz_export_path or '' }}" style="width:480px"></label>
+  </div>
+  <div class="toolbar">
+    <button type="button" onclick="validateCfg()">Validate</button>
+    <button type="button" onclick="saveCfg()">Save</button>
+  </div>
+  {% if errors %}<div class="msg">Errors: {{ errors|join('; ') }}</div>{% endif %}
+  {% if warnings %}<div>Warnings: {{ warnings|join('; ') }}</div>{% endif %}
+  <pre id="out"></pre>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function payload(){return {rips_staging_root:document.getElementById('rips_staging_root').value,rips_complete_root:document.getElementById('rips_complete_root').value,min_clip_seconds:document.getElementById('min_clip_seconds').value,clz_export_path:document.getElementById('clz_export_path').value};}
+async function validateCfg(){const r=await fetch('/api/v1/config/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});document.getElementById('out').textContent=JSON.stringify(await r.json(),null,2);}
+async function saveCfg(){const r=await fetch('/api/v1/config/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});document.getElementById('out').textContent=JSON.stringify(await r.json(),null,2);}
+async function browseInto(id){const r=await fetch('/api/v1/config/browse',{method:'POST'});const j=await r.json();if(j.ok&&j.path){document.getElementById(id).value=j.path;}else{document.getElementById('out').textContent=JSON.stringify(j,null,2);}}
+</script>
+{% endblock %}
